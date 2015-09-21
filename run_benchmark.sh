@@ -37,7 +37,9 @@ function wget_or_curl() {
 }
 
 function run_test() {
-    time $taskset_cmd $1 -rnnlm $basedir/models/$2 -train $data/ptb.train.txt -valid $data/ptb.valid.txt -hidden $hidden_size -threads $threads ${3:-}
+    cmd1="time $taskset_cmd $1 -rnnlm $basedir/models/$2 -train $data/ptb.train.txt -valid $data/ptb.valid.txt -hidden $hidden_size -threads $threads ${3:-} -use-cuda 1"
+    echo $cmd1
+    exec $cmd1
     $1 -rnnlm $basedir/models/$2 -test $data/ptb.test.txt -nce-accurate-test 1 2>&1 > /dev/null | grep "Test entropy" | cat
 }
 
@@ -83,11 +85,11 @@ $(dirname $0)/build.sh
 rm -rf $basedir/models
 mkdir -p $basedir/models
 
-fat_echo "Training Faster RNNLM on ptb"
-run_test $(dirname $0)/faster-rnnlm/rnnlm fasterrnnlm
-
 fat_echo "Training Faster RNNLM on ptb (NCE mode)"
 run_test $(dirname $0)/faster-rnnlm/rnnlm fasterrnnlm-nce "-nce 15"
+
+fat_echo "Training Faster RNNLM on ptb"
+run_test $(dirname $0)/faster-rnnlm/rnnlm fasterrnnlm
 
 fat_echo "Training RNNLM-HS on ptb"
 run_test $basedir/rnnlm-hs-0.1b/rnnlm rnnlm-hs

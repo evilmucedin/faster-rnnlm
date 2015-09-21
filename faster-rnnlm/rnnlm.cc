@@ -707,9 +707,12 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  /*
   if (!nce_accurate_test && !test_file.empty()) {
     use_cuda = false;
   }
+  */
+  fprintf(stderr, "use_cuda: %d\n", (int)use_cuda);
 
   srand(random_seed);
 

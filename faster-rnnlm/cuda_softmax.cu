@@ -27,6 +27,13 @@ void AssertCudaSuccessLast(const char* message) {
   return AssertCudaSuccess(cudaGetLastError(), message);
 }
 
+void AssertCuBLASSuccess(cublasStatus_t stat, const char* message) {
+  if (stat != CUBLAS_STATUS_SUCCESS) {
+    fprintf(stderr, "cuBLAS ERROR:\n   %s\n", message);
+    exit(2);
+  }
+}
+
 void InitCudaStorage(CudaStorage* cust, size_t layer_size, size_t vocab_size, size_t maxent_hash_size, Real lnz, bool memory_efficient_maxent) {
   cust->layer_size = layer_size;
   cust->vocab_size = vocab_size;
@@ -85,6 +92,7 @@ void InitCudaStorage(CudaStorage* cust, size_t layer_size, size_t vocab_size, si
     stat = cudaMalloc((void**)&(cust->vocab_ones), vocab_size * sizeof(Real));
     AssertCudaSuccess(stat, "Failed to allocate cuda memory for vocab_ones");
     cudaMemcpy(cust->vocab_ones, tmp, vocab_size * sizeof(Real), cudaMemcpyHostToDevice);
+    AssertCudaSuccess(stat, "Failed to copy cuda memory for vocab_ones");
     delete[] tmp;
   }
 
@@ -136,12 +144,14 @@ void FreeCudaStorage(CudaStorage* cust) {
 
 void UploadNetWeights(CudaStorage* cust, const Real* sm_embedding_cpu, const Real* maxent_cpu) {
   cudaMemcpy(cust->sm_embedding, sm_embedding_cpu, cust->layer_size * cust->vocab_size * sizeof(Real), cudaMemcpyHostToDevice);
+  AssertCudaSuccessLast("Failed to copy cuda memory for embedding");
   if (cust->memory_efficient_maxent) {
     for (size_t i = 0; i < cust->maxent_hash_size; ++i) {
       cust->maxent_cpu[i] = maxent_cpu[i];
     }
   } else {
     cudaMemcpy(cust->maxent, maxent_cpu, cust->maxent_hash_size * sizeof(Real), cudaMemcpyHostToDevice);
+    AssertCudaSuccessLast("Failed to copy cuda memory for embedding");
   }
 }
 
@@ -203,6 +213,7 @@ void CublasMultiply_A_BT(cublasHandle_t* handle, Real beta, int rows_a, int rows
 
     // C <- A * B^T + C * beta
     const Real alpha = 1;
+    cublasStatus_t status =
 #ifdef USE_DOUBLE
     cublasDgemm
 #else
@@ -215,6 +226,7 @@ void CublasMultiply_A_BT(cublasHandle_t* handle, Real beta, int rows_a, int rows
             dev_a, cols,
             &beta,
             dev_c, rows_b);
+    AssertCuBLASSuccess(status, "CublasMultiply_A_BT failed");  
 }
 
 void CalculateSoftMax(
@@ -282,6 +294,7 @@ void CalculateSoftMax(
             Real* dst = cust->maxent + (max_maxent_order * pos + i) * vocab_size;
             Real* src = cust->maxent_cpu + maxent_index;
             cudaMemcpyAsync(dst, src, vocab_size * sizeof(Real), cudaMemcpyHostToDevice, cust->inner->stream_data);
+    	    AssertCudaSuccess(stat, "Failed to async copy the matrix to cuda");
           }
         }
 
